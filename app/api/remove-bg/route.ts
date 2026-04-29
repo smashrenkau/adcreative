@@ -3,7 +3,7 @@ import OpenAI from 'openai';
 import fs from 'fs';
 import path from 'path';
 
-const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
+const getOpenAI = () => new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 
 export async function POST(request: NextRequest) {
   try {
@@ -13,7 +13,7 @@ export async function POST(request: NextRequest) {
     const buf = Buffer.from(imageB64, 'base64');
     const imageFile = new File([buf], filename ?? 'image.png', { type: mimeType });
 
-    const res = await openai.images.edit({
+    const res = await getOpenAI().images.edit({
       model: 'gpt-image-2',
       image: imageFile,
       prompt:

@@ -3,7 +3,7 @@ import OpenAI from 'openai';
 import fs from 'fs';
 import path from 'path';
 
-const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
+const getOpenAI = () => new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 
 type Size = '1024x1024' | '1024x1536' | '1536x1024';
 
@@ -71,7 +71,7 @@ export async function POST(request: NextRequest) {
       const buf = Buffer.from(previousImageB64, 'base64');
       const imageFile = new File([buf], 'previous.png', { type: 'image/png' });
 
-      const res = await openai.images.edit({
+      const res = await getOpenAI().images.edit({
         model: 'gpt-image-2',
         image: imageFile,
         prompt,
@@ -86,7 +86,7 @@ export async function POST(request: NextRequest) {
       const buf = Buffer.from(productImageB64, 'base64');
       const imageFile = new File([buf], 'product.png', { type: 'image/png' });
 
-      const res = await openai.images.edit({
+      const res = await getOpenAI().images.edit({
         model: 'gpt-image-2',
         image: imageFile,
         prompt,
@@ -102,7 +102,7 @@ export async function POST(request: NextRequest) {
       const buf = fs.readFileSync(imagePath);
       const imageFile = new File([buf], productFilename, { type: 'image/png' });
 
-      const res = await openai.images.edit({
+      const res = await getOpenAI().images.edit({
         model: 'gpt-image-2',
         image: imageFile,
         prompt,
@@ -113,7 +113,7 @@ export async function POST(request: NextRequest) {
     }
 
     // テキストのみで生成
-    const res = await openai.images.generate({
+    const res = await getOpenAI().images.generate({
       model: 'gpt-image-2',
       prompt,
       size,
