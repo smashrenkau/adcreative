@@ -1,8 +1,11 @@
 'use client';
 
 import { useState, useEffect, useRef } from 'react';
+import { useRouter } from 'next/navigation';
 
 type AspectRatio = 'square' | 'portrait' | 'landscape';
+
+const API = (path: string) => `/adcreative${path}`;
 
 interface UploadedImage {
   b64: string;
@@ -28,6 +31,13 @@ function Spinner({ size = 'lg' }: { size?: 'sm' | 'lg' }) {
 }
 
 export default function Home() {
+  const router = useRouter();
+
+  const handleLogout = async () => {
+    await fetch(API('/api/auth'), { method: 'DELETE' });
+    router.push(API('/login'));
+  };
+
   // デフォルト訴求ポイント
   const [defaults, setDefaults] = useState('');
   const [defaultsOpen, setDefaultsOpen] = useState(false);
@@ -56,7 +66,7 @@ export default function Home() {
   const [genError, setGenError] = useState<string | null>(null);
 
   useEffect(() => {
-    fetch('/api/defaults').then(r => r.json()).then(d => setDefaults(d.content ?? ''));
+    fetch(API('/api/defaults')).then(r => r.json()).then(d => setDefaults(d.content ?? ''));
   }, []);
 
   const saveDefaults = async () => {
@@ -107,7 +117,7 @@ export default function Home() {
     setBgError(null);
     setProcessedB64(null);
     try {
-      const res = await fetch('/api/remove-bg', {
+      const res = await fetch(API('/api/remove-bg'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ imageB64: uploaded.b64, mimeType: uploaded.mime, filename: uploaded.filename }),
@@ -133,7 +143,7 @@ export default function Home() {
     setGenError(null);
     setGeneratedImage(null);
     try {
-      const res = await fetch('/api/generate', {
+      const res = await fetch(API('/api/generate'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -159,7 +169,7 @@ export default function Home() {
     setRevising(true);
     setGenError(null);
     try {
-      const res = await fetch('/api/generate', {
+      const res = await fetch(API('/api/generate'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -187,9 +197,21 @@ export default function Home() {
       <div className="max-w-6xl mx-auto">
 
         {/* ヘッダー */}
-        <div className="mb-8">
-          <h1 className="text-3xl font-bold text-slate-800">広告クリエイティブ生成</h1>
-          <p className="text-slate-500 mt-1 text-sm">AI（GPT-image-2）を使って広告クリエイティブを自動生成します</p>
+        <div className="mb-8 flex items-start justify-between">
+          <div>
+            <h1 className="text-3xl font-bold text-slate-800">広告クリエイティブ生成</h1>
+            <p className="text-slate-500 mt-1 text-sm">AI（GPT-image-2）を使って広告クリエイティブを自動生成します</p>
+          </div>
+          <button
+            type="button"
+            onClick={handleLogout}
+            className="flex items-center gap-1.5 px-3 py-2 text-sm text-slate-500 hover:text-slate-700 border border-slate-200 hover:border-slate-300 rounded-lg transition-colors bg-white"
+          >
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
+            </svg>
+            ログアウト
+          </button>
         </div>
 
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 items-start">
