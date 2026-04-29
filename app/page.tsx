@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation';
 
 type AspectRatio = 'square' | 'portrait' | 'landscape';
 
-const API = (path: string) => `/adcreative${path}`;
+const API = (path: string) => path;
 
 interface UploadedImage {
   b64: string;
@@ -34,8 +34,8 @@ export default function Home() {
   const router = useRouter();
 
   const handleLogout = async () => {
-    await fetch(API('/api/auth'), { method: 'DELETE' });
-    router.push(API('/login'));
+    await fetch('/api/auth', { method: 'DELETE' });
+    router.push('/login');
   };
 
   // デフォルト訴求ポイント

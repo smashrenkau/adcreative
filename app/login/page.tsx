@@ -14,14 +14,14 @@ export default function LoginPage() {
     setLoading(true);
     setError('');
 
-    const res = await fetch('/adcreative/api/auth', {
+    const res = await fetch('/api/auth', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ password }),
     });
 
     if (res.ok) {
-      router.push('/adcreative');
+      router.push('/');
       router.refresh();
     } else {
       const data = await res.json();
