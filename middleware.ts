@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 
 const SESSION_COOKIE = 'ad_session';
 
-export function proxy(request: NextRequest) {
+export function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
 
   // ログインページと認証APIは誰でもアクセス可
