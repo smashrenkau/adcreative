@@ -122,6 +122,7 @@ export default function Home() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ imageB64: uploaded.b64, mimeType: uploaded.mime, filename: uploaded.filename }),
       });
+      if (!res.ok && res.status === 504) throw new Error('処理がタイムアウトしました。しばらく待ってから再試行してください。');
       const data = await res.json();
       if (data.error) throw new Error(data.error);
       setProcessedB64(data.imageB64);
@@ -154,6 +155,7 @@ export default function Home() {
           productImageB64: activeImageB64,
         }),
       });
+      if (!res.ok && res.status === 504) throw new Error('処理がタイムアウトしました。しばらく待ってから再試行してください。');
       const data = await res.json();
       if (data.error) throw new Error(data.error);
       setGeneratedImage(data.imageB64);
