@@ -75,7 +75,7 @@ export async function POST(request: NextRequest) {
         model: 'gpt-image-2',
         image: imageFile,
         prompt,
-        size,
+        size: '1024x1024',
       });
 
       return NextResponse.json({ imageB64: res.data?.[0]?.b64_json });
@@ -90,7 +90,7 @@ export async function POST(request: NextRequest) {
         model: 'gpt-image-2',
         image: imageFile,
         prompt,
-        size,
+        size: '1024x1024',
       });
 
       return NextResponse.json({ imageB64: res.data?.[0]?.b64_json });
@@ -100,13 +100,13 @@ export async function POST(request: NextRequest) {
     if (productFilename) {
       const imagePath = path.join(process.cwd(), 'pictransparent', path.basename(productFilename));
       const buf = fs.readFileSync(imagePath);
-      const imageFile = new File([buf], productFilename, { type: 'image/png' });
+      const imageFile = new File([buf], 'product.png', { type: 'image/png' });
 
       const res = await getOpenAI().images.edit({
         model: 'gpt-image-2',
         image: imageFile,
         prompt,
-        size,
+        size: '1024x1024',
       });
 
       return NextResponse.json({ imageB64: res.data?.[0]?.b64_json });

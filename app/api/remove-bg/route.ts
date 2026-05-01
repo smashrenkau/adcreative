@@ -11,7 +11,7 @@ export async function POST(request: NextRequest) {
     const { imageB64, mimeType = 'image/png', filename } = body;
 
     const buf = Buffer.from(imageB64, 'base64');
-    const imageFile = new File([buf], filename ?? 'image.png', { type: mimeType });
+    const imageFile = new File([buf], 'image.png', { type: mimeType });
 
     const res = await getOpenAI().images.edit({
       model: 'gpt-image-2',
