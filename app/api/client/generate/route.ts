@@ -94,7 +94,7 @@ async function compositeLogo(baseB64: string, logoBuffer: Buffer): Promise<strin
   const bw = baseMeta.width ?? 1024;
   const bh = baseMeta.height ?? 1024;
 
-  const targetLogoW = Math.round(bw * 0.13);
+  const targetLogoW = Math.round(bw * 0.18);
   const logoResized = await sharp(logoBuffer)
     .resize({ width: targetLogoW, withoutEnlargement: false })
     .png()
@@ -104,26 +104,11 @@ async function compositeLogo(baseB64: string, logoBuffer: Buffer): Promise<strin
   const lw = logoMeta.width ?? targetLogoW;
   const lh = logoMeta.height ?? targetLogoW;
 
-  const pad = Math.round(bw * 0.025);
-  const bgPad = Math.round(targetLogoW * 0.18);
-  const bgW = lw + bgPad * 2;
-  const bgH = lh + bgPad * 2;
-  const radius = Math.round(bgH / 5);
-
-  const bgSvg = `<svg width="${bgW}" height="${bgH}" xmlns="http://www.w3.org/2000/svg">
-    <rect x="0" y="0" width="${bgW}" height="${bgH}" rx="${radius}" ry="${radius}" fill="white" fill-opacity="0.88"/>
-  </svg>`;
-  const bgBuffer = Buffer.from(bgSvg);
-
-  const { left: bgLeft, top: bgTop } = await findQuietestPosition(baseBuffer, bw, bh, bgW, bgH, pad);
-  const logoLeft = bgLeft + bgPad;
-  const logoTop = bgTop + bgPad;
+  const pad = Math.round(bw * 0.035);
+  const { left, top } = await findQuietestPosition(baseBuffer, bw, bh, lw, lh, pad);
 
   const out = await sharp(baseBuffer)
-    .composite([
-      { input: bgBuffer, left: bgLeft, top: bgTop },
-      { input: logoResized, left: logoLeft, top: logoTop },
-    ])
+    .composite([{ input: logoResized, left, top }])
     .png()
     .toBuffer();
 
