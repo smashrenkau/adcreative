@@ -49,8 +49,9 @@ export default function Home() {
   const [monthlyPrice, setMonthlyPrice] = useState('');
   const [atmosphere, setAtmosphere] = useState('');
   const [aspectRatio, setAspectRatio] = useState<AspectRatio>('square');
+  const [imageCount, setImageCount] = useState(1);
 
-  // 画像
+  // 画像アップロード
   const [uploaded, setUploaded] = useState<UploadedImage | null>(null);
   const [processedB64, setProcessedB64] = useState<string | null>(null);
   const [bgProcessing, setBgProcessing] = useState(false);
@@ -58,11 +59,11 @@ export default function Home() {
   const [dragOver, setDragOver] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
 
-  // 生成
+  // 生成（複数枚対応）
   const [generating, setGenerating] = useState(false);
-  const [generatedImage, setGeneratedImage] = useState<string | null>(null);
-  const [revisionRequest, setRevisionRequest] = useState('');
-  const [revising, setRevising] = useState(false);
+  const [generatedImages, setGeneratedImages] = useState<string[]>([]);
+  const [revisionRequests, setRevisionRequests] = useState<string[]>([]);
+  const [revisingIndex, setRevisingIndex] = useState<number | null>(null);
   const [genError, setGenError] = useState<string | null>(null);
 
   useEffect(() => {
@@ -81,7 +82,6 @@ export default function Home() {
     setTimeout(() => setDefaultsSaved(false), 2000);
   };
 
-  // 画像ファイルを読み込む
   const loadFile = (file: File) => {
     const reader = new FileReader();
     reader.onload = e => {
@@ -91,7 +91,7 @@ export default function Home() {
       setUploaded({ b64, mime, filename: file.name });
       setProcessedB64(null);
       setBgError(null);
-      setGeneratedImage(null);
+      setGeneratedImages([]);
       setGenError(null);
     };
     reader.readAsDataURL(file);
@@ -110,7 +110,6 @@ export default function Home() {
     e.target.value = '';
   };
 
-  // 背景透過
   const removeBg = async () => {
     if (!uploaded) return;
     setBgProcessing(true);
@@ -133,42 +132,48 @@ export default function Home() {
     }
   };
 
-  // 使用する画像（透過済み優先）
   const activeImageB64 = processedB64 ?? uploaded?.b64 ?? null;
-
   const canGenerate = productName.trim() !== '' && monthlyPrice.trim() !== '' && atmosphere.trim() !== '' && !generating;
 
   const handleGenerate = async () => {
     if (!canGenerate) return;
     setGenerating(true);
     setGenError(null);
-    setGeneratedImage(null);
-    try {
-      const res = await fetch(API('/api/generate'), {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          productName,
-          monthlyPrice,
-          atmosphere,
-          aspectRatio,
-          productImageB64: activeImageB64,
-        }),
-      });
-      if (!res.ok && res.status === 504) throw new Error('処理がタイムアウトしました。しばらく待ってから再試行してください。');
-      const data = await res.json();
-      if (data.error) throw new Error(data.error);
-      setGeneratedImage(data.imageB64);
-    } catch (e: unknown) {
-      setGenError(e instanceof Error ? e.message : '生成に失敗しました');
-    } finally {
-      setGenerating(false);
+    setGeneratedImages([]);
+    setRevisionRequests(Array(imageCount).fill(''));
+
+    for (let i = 0; i < imageCount; i++) {
+      try {
+        const res = await fetch(API('/api/generate'), {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            productName,
+            monthlyPrice,
+            atmosphere,
+            aspectRatio,
+            productImageB64: activeImageB64,
+            variationIndex: i,
+            totalCount: imageCount,
+          }),
+        });
+        if (!res.ok && res.status === 504) throw new Error(`${i + 1}枚目: タイムアウトしました。`);
+        const data = await res.json();
+        if (data.error) throw new Error(`${i + 1}枚目: ${data.error}`);
+        setGeneratedImages(prev => [...prev, data.imageB64]);
+      } catch (e: unknown) {
+        setGenError(e instanceof Error ? e.message : '生成に失敗しました');
+        setGeneratedImages(prev => [...prev, '']);
+      }
     }
+
+    setGenerating(false);
   };
 
-  const handleRevise = async () => {
-    if (!revisionRequest.trim() || !generatedImage || revising) return;
-    setRevising(true);
+  const handleRevise = async (index: number) => {
+    const req = revisionRequests[index] ?? '';
+    if (!req.trim() || revisingIndex !== null) return;
+    setRevisingIndex(index);
     setGenError(null);
     try {
       const res = await fetch(API('/api/generate'), {
@@ -179,20 +184,26 @@ export default function Home() {
           monthlyPrice,
           atmosphere,
           aspectRatio,
-          revisionRequest,
-          previousImageB64: generatedImage,
+          revisionRequest: req,
+          previousImageB64: generatedImages[index],
         }),
       });
       const data = await res.json();
       if (data.error) throw new Error(data.error);
-      setGeneratedImage(data.imageB64);
-      setRevisionRequest('');
+      setGeneratedImages(prev => prev.map((img, i) => i === index ? data.imageB64 : img));
+      setRevisionRequests(prev => prev.map((r, i) => i === index ? '' : r));
     } catch (e: unknown) {
       setGenError(e instanceof Error ? e.message : '修正に失敗しました');
     } finally {
-      setRevising(false);
+      setRevisingIndex(null);
     }
   };
+
+  const updateRevisionRequest = (index: number, value: string) => {
+    setRevisionRequests(prev => prev.map((r, i) => i === index ? value : r));
+  };
+
+  const pendingCount = generating ? imageCount - generatedImages.length : 0;
 
   return (
     <main className="min-h-screen bg-gradient-to-br from-slate-50 to-blue-50 p-6 md:p-10">
@@ -204,16 +215,27 @@ export default function Home() {
             <h1 className="text-3xl font-bold text-slate-800">広告クリエイティブ生成</h1>
             <p className="text-slate-500 mt-1 text-sm">AI（GPT-image-2）を使って広告クリエイティブを自動生成します</p>
           </div>
-          <button
-            type="button"
-            onClick={handleLogout}
-            className="flex items-center gap-1.5 px-3 py-2 text-sm text-slate-500 hover:text-slate-700 border border-slate-200 hover:border-slate-300 rounded-lg transition-colors bg-white"
-          >
-            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
-            </svg>
-            ログアウト
-          </button>
+          <div className="flex items-center gap-2">
+            <a
+              href="/history"
+              className="flex items-center gap-1.5 px-3 py-2 text-sm text-slate-500 hover:text-slate-700 border border-slate-200 hover:border-slate-300 rounded-lg transition-colors bg-white"
+            >
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+              </svg>
+              履歴
+            </a>
+            <button
+              type="button"
+              onClick={handleLogout}
+              className="flex items-center gap-1.5 px-3 py-2 text-sm text-slate-500 hover:text-slate-700 border border-slate-200 hover:border-slate-300 rounded-lg transition-colors bg-white"
+            >
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
+              </svg>
+              ログアウト
+            </button>
+          </div>
         </div>
 
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 items-start">
@@ -275,7 +297,6 @@ export default function Home() {
               <label className="block text-sm font-medium text-slate-600">商品画像</label>
 
               {!uploaded ? (
-                /* アップロードエリア */
                 <div
                   onClick={() => fileRef.current?.click()}
                   onDragOver={e => { e.preventDefault(); setDragOver(true); }}
@@ -291,11 +312,8 @@ export default function Home() {
                   <input ref={fileRef} type="file" accept="image/png,image/jpeg,image/webp" className="hidden" onChange={handleFileInput} />
                 </div>
               ) : (
-                /* 画像プレビュー＋背景透過 */
                 <div className="border border-slate-200 rounded-xl overflow-hidden">
-                  {/* 元画像 / 透過後 の並列表示 */}
                   <div className={`grid ${processedB64 ? 'grid-cols-2' : 'grid-cols-1'} divide-x divide-slate-100`}>
-                    {/* 元画像 */}
                     <div className="p-3 space-y-1">
                       <p className="text-xs text-slate-400">元画像</p>
                       {/* eslint-disable-next-line @next/next/no-img-element */}
@@ -305,7 +323,6 @@ export default function Home() {
                         className="w-full h-36 object-contain rounded bg-slate-100"
                       />
                     </div>
-                    {/* 透過後 */}
                     {processedB64 && (
                       <div className="p-3 space-y-1">
                         <p className="text-xs text-slate-400">透過後</p>
@@ -320,7 +337,6 @@ export default function Home() {
                     )}
                   </div>
 
-                  {/* 操作ボタン */}
                   <div className="p-3 border-t border-slate-100 flex gap-2">
                     {!processedB64 ? (
                       <button
@@ -353,7 +369,6 @@ export default function Home() {
                   {bgError && (
                     <p className="text-xs text-red-500 bg-red-50 px-3 py-2 border-t border-red-100">{bgError}</p>
                   )}
-
                   {processedB64 && (
                     <p className="text-xs text-emerald-600 bg-emerald-50 px-3 py-2 border-t border-emerald-100 text-center">
                       ✓ 透過済み画像をクリエイティブ生成に使用します
@@ -411,6 +426,30 @@ export default function Home() {
               </div>
             </div>
 
+            {/* 生成枚数 */}
+            <div className="space-y-3">
+              <label className="block text-sm font-medium text-slate-600">
+                生成枚数
+                <span className="ml-2 text-blue-600 font-bold">{imageCount}枚</span>
+              </label>
+              <div className="flex gap-1.5 flex-wrap">
+                {Array.from({ length: 10 }, (_, i) => i + 1).map(n => (
+                  <button
+                    key={n}
+                    type="button"
+                    onClick={() => setImageCount(n)}
+                    className={`w-9 h-9 rounded-lg text-sm font-medium transition-all ${
+                      imageCount === n
+                        ? 'bg-blue-600 text-white shadow-sm'
+                        : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                    }`}
+                  >
+                    {n}
+                  </button>
+                ))}
+              </div>
+            </div>
+
             {/* 生成ボタン */}
             <button
               type="button"
@@ -424,9 +463,9 @@ export default function Home() {
                     <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
                     <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z" />
                   </svg>
-                  生成中...
+                  生成中... ({generatedImages.length}/{imageCount})
                 </span>
-              ) : 'クリエイティブを生成'}
+              ) : `クリエイティブを生成（${imageCount}枚）`}
             </button>
 
             {genError && (
@@ -438,53 +477,123 @@ export default function Home() {
 
           {/* ===== 右: 生成結果 ===== */}
           <div className="bg-white rounded-2xl shadow-sm border border-slate-200 p-6 space-y-5">
-            <h2 className="text-lg font-semibold text-slate-700 border-b border-slate-100 pb-3">生成結果</h2>
+            <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+              <h2 className="text-lg font-semibold text-slate-700">生成結果</h2>
+              {generatedImages.length > 0 && !generating && (
+                <span className="text-xs text-slate-400">{generatedImages.filter(Boolean).length}枚完成</span>
+              )}
+            </div>
 
-            {(generating || revising) ? (
+            {/* 最初の1枚を待機中 */}
+            {generating && generatedImages.length === 0 && (
               <div className="flex flex-col items-center justify-center py-20 gap-4">
                 <Spinner size="lg" />
-                <p className="text-slate-400 text-sm">{revising ? '修正中です...' : 'AIが広告を生成中です...'}</p>
+                <p className="text-slate-400 text-sm">AIが広告を生成中です...</p>
                 <p className="text-slate-300 text-xs">通常30〜60秒かかります</p>
               </div>
-            ) : generatedImage ? (
+            )}
+
+            {/* 生成済み画像あり */}
+            {generatedImages.length > 0 && (
               <div className="space-y-4">
-                <div className={`${ASPECT_CLASS[aspectRatio]} relative w-full max-w-sm mx-auto overflow-hidden rounded-xl border border-slate-200 shadow-sm`}>
-                  {/* eslint-disable-next-line @next/next/no-img-element */}
-                  <img src={`data:image/png;base64,${generatedImage}`} alt="生成された広告" className="w-full h-full object-cover" />
-                </div>
 
-                <a
-                  href={`data:image/png;base64,${generatedImage}`}
-                  download={`${productName || 'creative'}_ad.png`}
-                  className="flex items-center justify-center gap-2 w-full py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white text-sm font-medium rounded-xl transition-colors"
-                >
-                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
-                  </svg>
-                  ダウンロード
-                </a>
+                {/* プログレスバー（生成中のみ） */}
+                {generating && (
+                  <div className="flex items-center gap-3 bg-blue-50 rounded-lg px-4 py-3">
+                    <Spinner size="sm" />
+                    <div className="flex-1">
+                      <div className="text-xs text-blue-700 font-medium mb-1.5">
+                        {generatedImages.length} / {imageCount} 枚生成完了
+                      </div>
+                      <div className="w-full bg-blue-100 rounded-full h-1.5">
+                        <div
+                          className="bg-blue-500 h-1.5 rounded-full transition-all duration-500"
+                          style={{ width: `${(generatedImages.length / imageCount) * 100}%` }}
+                        />
+                      </div>
+                    </div>
+                  </div>
+                )}
 
-                {/* 修正 */}
-                <div className="border-t border-slate-100 pt-4 space-y-3">
-                  <h3 className="text-sm font-medium text-slate-600">修正依頼</h3>
-                  <textarea
-                    value={revisionRequest}
-                    onChange={e => setRevisionRequest(e.target.value)}
-                    placeholder="例: 背景をもっと明るくして。テキストを大きくして。"
-                    rows={3}
-                    className="w-full border border-slate-300 rounded-lg px-3 py-2.5 text-slate-700 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400 resize-none"
-                  />
-                  <button
-                    type="button"
-                    onClick={handleRevise}
-                    disabled={!revisionRequest.trim() || revising}
-                    className="w-full py-2.5 bg-amber-500 hover:bg-amber-600 disabled:bg-slate-200 disabled:text-slate-400 text-white text-sm font-medium rounded-xl transition-colors"
-                  >
-                    修正する
-                  </button>
+                {/* 画像グリッド */}
+                <div className={`grid gap-4 ${generatedImages.length === 1 && pendingCount === 0 ? 'grid-cols-1' : 'grid-cols-2'}`}>
+
+                  {/* 完成済みカード */}
+                  {generatedImages.map((img, index) => (
+                    <div key={index} className="border border-slate-200 rounded-xl overflow-hidden shadow-sm bg-white">
+                      <div className={`${ASPECT_CLASS[aspectRatio]} relative w-full overflow-hidden bg-slate-100`}>
+                        {img ? (
+                          /* eslint-disable-next-line @next/next/no-img-element */
+                          <img
+                            src={`data:image/png;base64,${img}`}
+                            alt={`バリエーション${index + 1}`}
+                            className="w-full h-full object-cover"
+                          />
+                        ) : (
+                          <div className="absolute inset-0 flex items-center justify-center">
+                            <p className="text-xs text-slate-400">生成失敗</p>
+                          </div>
+                        )}
+                        <span className="absolute top-2 left-2 bg-black/50 text-white text-xs px-2 py-0.5 rounded-full">
+                          {index + 1}/{imageCount}
+                        </span>
+                      </div>
+
+                      {img && (
+                        <div className="p-2.5 space-y-2">
+                          <a
+                            href={`data:image/png;base64,${img}`}
+                            download={`${productName || 'creative'}_ad_${index + 1}.png`}
+                            className="flex items-center justify-center gap-1.5 w-full py-2 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-medium rounded-lg transition-colors"
+                          >
+                            <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+                            </svg>
+                            ダウンロード
+                          </a>
+
+                          <div className="space-y-1.5">
+                            <textarea
+                              value={revisionRequests[index] ?? ''}
+                              onChange={e => updateRevisionRequest(index, e.target.value)}
+                              placeholder="修正依頼（例: 背景を明るくして）"
+                              rows={2}
+                              className="w-full border border-slate-200 rounded-lg px-2.5 py-2 text-slate-700 text-xs focus:outline-none focus:ring-2 focus:ring-blue-400 resize-none"
+                            />
+                            <button
+                              type="button"
+                              onClick={() => handleRevise(index)}
+                              disabled={!(revisionRequests[index] ?? '').trim() || revisingIndex !== null}
+                              className="w-full py-1.5 bg-amber-500 hover:bg-amber-600 disabled:bg-slate-100 disabled:text-slate-400 text-white text-xs font-medium rounded-lg transition-colors flex items-center justify-center gap-1.5"
+                            >
+                              {revisingIndex === index ? <><Spinner size="sm" /><span>修正中...</span></> : '修正する'}
+                            </button>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  ))}
+
+                  {/* 生成待ちプレースホルダー */}
+                  {generating && Array.from({ length: pendingCount }).map((_, i) => (
+                    <div key={`pending-${i}`} className="border border-slate-100 rounded-xl overflow-hidden bg-slate-50">
+                      <div className={`${ASPECT_CLASS[aspectRatio]} relative w-full overflow-hidden`}>
+                        <div className="absolute inset-0 flex items-center justify-center">
+                          {i === 0 ? (
+                            <Spinner size="sm" />
+                          ) : (
+                            <div className="w-5 h-5 rounded-full bg-slate-200 animate-pulse" />
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  ))}
                 </div>
               </div>
-            ) : (
+            )}
+
+            {/* 初期状態 */}
+            {!generating && generatedImages.length === 0 && (
               <div className="flex flex-col items-center justify-center py-20 text-slate-300 gap-4">
                 <svg className="w-20 h-20" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
