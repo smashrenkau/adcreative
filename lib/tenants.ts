@@ -7,6 +7,7 @@ export type Tenant = {
   base_prompt: string;
   active: boolean;
   monthly_limit: number;
+  logo_url: string | null;
 };
 
 export function getYearMonth(date = new Date()): string {
@@ -28,8 +29,8 @@ export async function getAllTenants(): Promise<Tenant[]> {
 export async function createTenant(data: Omit<Tenant, 'id'>): Promise<Tenant> {
   const sql = getSql();
   const rows = await sql`
-    INSERT INTO tenants (slug, name, base_prompt, active, monthly_limit)
-    VALUES (${data.slug}, ${data.name}, ${data.base_prompt}, ${data.active}, ${data.monthly_limit})
+    INSERT INTO tenants (slug, name, base_prompt, active, monthly_limit, logo_url)
+    VALUES (${data.slug}, ${data.name}, ${data.base_prompt}, ${data.active}, ${data.monthly_limit}, ${data.logo_url})
     RETURNING *
   `;
   return rows[0] as Tenant;
@@ -43,7 +44,8 @@ export async function updateTenant(id: number, data: Omit<Tenant, 'id'>): Promis
       name = ${data.name},
       base_prompt = ${data.base_prompt},
       active = ${data.active},
-      monthly_limit = ${data.monthly_limit}
+      monthly_limit = ${data.monthly_limit},
+      logo_url = ${data.logo_url}
     WHERE id = ${id}
     RETURNING *
   `;

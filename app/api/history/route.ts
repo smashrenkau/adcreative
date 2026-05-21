@@ -6,7 +6,7 @@ export async function GET() {
     return NextResponse.json({ items: [] });
   }
   try {
-    const items = await readHistory();
+    const items = await readHistory('_renkau');
     return NextResponse.json({ items });
   } catch {
     return NextResponse.json({ items: [] });

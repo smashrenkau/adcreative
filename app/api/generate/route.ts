@@ -106,7 +106,7 @@ export async function POST(request: NextRequest) {
       });
 
       const imageB64 = res.data?.[0]?.b64_json;
-      if (imageB64) await appendHistory(imageB64, saveMeta);
+      if (imageB64) await appendHistory('_renkau', imageB64, saveMeta);
       return NextResponse.json({ imageB64 });
     }
 
@@ -123,7 +123,7 @@ export async function POST(request: NextRequest) {
       });
 
       const imageB64 = res.data?.[0]?.b64_json;
-      if (imageB64) await appendHistory(imageB64, saveMeta);
+      if (imageB64) await appendHistory('_renkau', imageB64, saveMeta);
       return NextResponse.json({ imageB64 });
     }
 
@@ -141,7 +141,7 @@ export async function POST(request: NextRequest) {
       });
 
       const imageB64 = res.data?.[0]?.b64_json;
-      if (imageB64) await appendHistory(imageB64, saveMeta);
+      if (imageB64) await appendHistory('_renkau', imageB64, saveMeta);
       return NextResponse.json({ imageB64 });
     }
 
@@ -153,7 +153,7 @@ export async function POST(request: NextRequest) {
     });
 
     const imageB64 = res.data?.[0]?.b64_json;
-    if (imageB64) await appendHistory(imageB64, saveMeta);
+    if (imageB64) await appendHistory('_renkau', imageB64, saveMeta);
     return NextResponse.json({ imageB64 });
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : 'Unknown error';

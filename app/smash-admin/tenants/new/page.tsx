@@ -149,4 +149,4 @@ function Field({ label, hint, children }: { label: string; hint?: string; childr
   );
 }
 
-const inputClass = 'w-full border border-gray-200 rounded-lg p-3 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500';
+const inputClass = 'w-full border border-gray-200 rounded-lg p-3 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 text-gray-900';

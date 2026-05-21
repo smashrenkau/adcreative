@@ -14,7 +14,7 @@ export async function GET() {
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
-    const { slug, name, base_prompt, active, monthly_limit } = body;
+    const { slug, name, base_prompt, active, monthly_limit, logo_url } = body;
 
     if (!slug || !name) {
       return NextResponse.json({ error: 'slug と name は必須です' }, { status: 400 });
@@ -26,6 +26,7 @@ export async function POST(request: NextRequest) {
       base_prompt: base_prompt ?? '',
       active: active ?? false,
       monthly_limit: monthly_limit ?? 30,
+      logo_url: logo_url ?? null,
     });
 
     return NextResponse.json(tenant, { status: 201 });

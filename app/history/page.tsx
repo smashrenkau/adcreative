@@ -4,7 +4,7 @@ import { readHistory } from '@/lib/blob-history';
 export const dynamic = 'force-dynamic';
 
 export default async function HistoryPage() {
-  const items = await readHistory();
+  const items = await readHistory('_renkau');
 
   return (
     <main className="min-h-screen bg-gradient-to-br from-slate-50 to-blue-50 p-6 md:p-10">

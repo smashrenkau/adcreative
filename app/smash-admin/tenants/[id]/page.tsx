@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useRouter, useParams } from 'next/navigation';
 import Link from 'next/link';
 import type { Tenant } from '@/lib/tenants';
@@ -13,8 +13,10 @@ export default function EditTenantPage() {
   const [saving, setSaving] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [resetting, setResetting] = useState(false);
+  const [uploadingLogo, setUploadingLogo] = useState(false);
   const [error, setError] = useState('');
   const [message, setMessage] = useState('');
+  const logoInputRef = useRef<HTMLInputElement>(null);
 
   const [form, setForm] = useState({
     slug: '',
@@ -22,6 +24,7 @@ export default function EditTenantPage() {
     monthly_limit: '30',
     base_prompt: '',
     active: false,
+    logo_url: '' as string | null,
   });
 
   useEffect(() => {
@@ -37,12 +40,13 @@ export default function EditTenantPage() {
             monthly_limit: String(found.monthly_limit),
             base_prompt: found.base_prompt,
             active: found.active,
+            logo_url: found.logo_url,
           });
         }
       });
   }, [id]);
 
-  const set = (key: string, value: string | boolean) =>
+  const set = (key: string, value: string | boolean | null) =>
     setForm(f => ({ ...f, [key]: value }));
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -84,6 +88,34 @@ export default function EditTenantPage() {
     });
     setResetting(false);
     setMessage(res.ok ? '今月の使用枚数をリセットしました' : 'リセットに失敗しました');
+  };
+
+  const handleLogoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setUploadingLogo(true);
+    setError('');
+    setMessage('');
+
+    const fd = new FormData();
+    fd.append('file', file);
+    fd.append('slug', form.slug);
+
+    const res = await fetch('/api/smash-admin/upload-logo', { method: 'POST', body: fd });
+    setUploadingLogo(false);
+    const data = await res.json();
+    if (res.ok) {
+      set('logo_url', data.url);
+      setMessage('ロゴをアップロードしました。「保存する」を押して反映してください。');
+    } else {
+      setError(data.error ?? 'アップロードに失敗しました');
+    }
+    if (logoInputRef.current) logoInputRef.current.value = '';
+  };
+
+  const handleLogoRemove = () => {
+    if (!confirm('ロゴを外しますか？')) return;
+    set('logo_url', null);
   };
 
   if (!tenant) {
@@ -141,6 +173,42 @@ export default function EditTenantPage() {
           </Field>
 
           <Field
+            label="企業ロゴ"
+            hint="PNG/SVG/JPG/WebP対応・5MB以下。透過PNG推奨。生成画像の右下に自動合成されます。"
+          >
+            <div className="flex items-start gap-4">
+              {form.logo_url ? (
+                <div className="flex items-center gap-3">
+                  <div className="w-24 h-24 border border-gray-200 rounded-lg flex items-center justify-center bg-gray-50 overflow-hidden">
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img src={form.logo_url} alt="logo" className="max-w-full max-h-full object-contain" />
+                  </div>
+                  <button
+                    type="button"
+                    onClick={handleLogoRemove}
+                    className="text-xs text-red-600 hover:underline"
+                  >
+                    外す
+                  </button>
+                </div>
+              ) : (
+                <p className="text-xs text-gray-400 self-center">未設定</p>
+              )}
+              <div className="ml-auto">
+                <input
+                  ref={logoInputRef}
+                  type="file"
+                  accept="image/png,image/jpeg,image/webp,image/svg+xml"
+                  onChange={handleLogoUpload}
+                  disabled={uploadingLogo}
+                  className="text-xs"
+                />
+                {uploadingLogo && <p className="text-xs text-gray-400 mt-1">アップロード中...</p>}
+              </div>
+            </div>
+          </Field>
+
+          <Field
             label="広告生成プロンプト（ベース設定）"
             hint="AIへの指示を自由に記述。業種・サービス・必須訴求・デザインルールなど何でもOK。ユーザーには表示されません。"
           >
@@ -148,7 +216,7 @@ export default function EditTenantPage() {
               value={form.base_prompt}
               onChange={e => set('base_prompt', e.target.value)}
               rows={14}
-              className={`${inputClass} resize-y font-mono text-xs`}
+              className={`${inputClass} resize-y font-mono text-xs text-gray-900`}
             />
           </Field>
 
@@ -219,4 +287,4 @@ function Field({ label, hint, children }: { label: string; hint?: string; childr
   );
 }
 
-const inputClass = 'w-full border border-gray-200 rounded-lg p-3 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500';
+const inputClass = 'w-full border border-gray-200 rounded-lg p-3 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 text-gray-900';

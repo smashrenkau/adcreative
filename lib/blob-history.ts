@@ -1,21 +1,23 @@
-import { put, list, get } from '@vercel/blob';
+import { put, list, get, del } from '@vercel/blob';
 import { randomUUID } from 'crypto';
 
 export interface HistoryItem {
   id: string;
-  productName: string;
-  monthlyPrice: string;
   atmosphere: string;
   aspectRatio: string;
   imageUrl: string;
   createdAt: string;
+  productName?: string;
+  monthlyPrice?: string;
 }
 
-const INDEX_PATH = 'history/index.json';
+const MAX_PER_SCOPE = 100;
+const indexPath = (scope: string) => `history/${scope}/index.json`;
+const imagePath = (scope: string, id: string) => `history/${scope}/images/${id}.png`;
 
-export async function readHistory(): Promise<HistoryItem[]> {
+export async function readHistory(scope: string): Promise<HistoryItem[]> {
   try {
-    const { blobs } = await list({ prefix: INDEX_PATH, limit: 1 });
+    const { blobs } = await list({ prefix: indexPath(scope), limit: 1 });
     if (!blobs[0]) return [];
     const result = await get(blobs[0].url, { access: 'private' });
     if (!result || result.statusCode !== 200 || !result.stream) return [];
@@ -27,33 +29,42 @@ export async function readHistory(): Promise<HistoryItem[]> {
 }
 
 export async function appendHistory(
+  scope: string,
   imageB64: string,
-  meta: Pick<HistoryItem, 'productName' | 'monthlyPrice' | 'atmosphere' | 'aspectRatio'>
+  meta: Pick<HistoryItem, 'atmosphere' | 'aspectRatio'> &
+    Partial<Pick<HistoryItem, 'productName' | 'monthlyPrice'>>,
 ): Promise<void> {
   if (!process.env.BLOB_READ_WRITE_TOKEN) return;
 
   const id = randomUUID();
   const buf = Buffer.from(imageB64, 'base64');
-  const blobPath = `history/images/${id}.png`;
+  const path = imagePath(scope, id);
 
-  await put(
-    blobPath,
-    new Blob([buf], { type: 'image/png' }),
-    { access: 'private', addRandomSuffix: false }
-  );
+  await put(path, new Blob([buf], { type: 'image/png' }), {
+    access: 'private',
+    addRandomSuffix: false,
+  });
 
-  // プロキシURL経由でブラウザに表示する
-  const imageUrl = `/api/blob-proxy?path=${encodeURIComponent(blobPath)}`;
+  const imageUrl = `/api/blob-proxy?path=${encodeURIComponent(path)}`;
 
-  const current = await readHistory();
+  const current = await readHistory(scope);
   const updated: HistoryItem[] = [
     { id, ...meta, imageUrl, createdAt: new Date().toISOString() },
     ...current,
   ];
 
+  const pruned = updated.slice(0, MAX_PER_SCOPE);
+  const removed = updated.slice(MAX_PER_SCOPE);
+
+  await Promise.all(
+    removed.map(item =>
+      del(imagePath(scope, item.id)).catch(() => undefined),
+    ),
+  );
+
   await put(
-    INDEX_PATH,
-    new Blob([JSON.stringify(updated)], { type: 'application/json' }),
-    { access: 'private', addRandomSuffix: false, allowOverwrite: true }
+    indexPath(scope),
+    new Blob([JSON.stringify(pruned)], { type: 'application/json' }),
+    { access: 'private', addRandomSuffix: false, allowOverwrite: true },
   );
 }

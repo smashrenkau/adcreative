@@ -1,8 +1,20 @@
 import { NextRequest, NextResponse } from 'next/server';
 import OpenAI from 'openai';
+import sharp from 'sharp';
+import { head, get } from '@vercel/blob';
 import { getTenantBySlug, getUsage, incrementUsage, getYearMonth } from '@/lib/tenants';
+import { appendHistory } from '@/lib/blob-history';
+
+export const maxDuration = 300;
 
 const getOpenAI = () => new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
+
+type Size = '1024x1024' | '1024x1536' | '1536x1024';
+const SIZE_MAP: Record<string, Size> = {
+  square: '1024x1024',
+  portrait: '1024x1536',
+  landscape: '1536x1024',
+};
 
 function buildPrompt(basePrompt: string, atmosphere: string): string {
   return `${basePrompt}
@@ -11,27 +23,97 @@ function buildPrompt(basePrompt: string, atmosphere: string): string {
 ${atmosphere}`;
 }
 
+function buildRevisionPrompt(basePrompt: string, atmosphere: string, revisionRequest: string): string {
+  return `以下の広告画像を修正してください。
+
+修正内容: ${revisionRequest}
+
+【元の方針】
+${basePrompt}
+
+${atmosphere ? `【元の雰囲気指定】\n${atmosphere}` : ''}`;
+}
+
+async function fetchLogoBuffer(logoUrl: string): Promise<Buffer | null> {
+  try {
+    const u = new URL(logoUrl, 'http://x');
+    const path = u.searchParams.get('path');
+    if (!path) return null;
+    const blob = await head(path);
+    const result = await get(blob.url, { access: 'private' });
+    if (!result || result.statusCode !== 200 || !result.stream) return null;
+    const ab = await new Response(result.stream).arrayBuffer();
+    return Buffer.from(ab);
+  } catch {
+    return null;
+  }
+}
+
+async function compositeLogo(baseB64: string, logoBuffer: Buffer): Promise<string> {
+  const baseBuffer = Buffer.from(baseB64, 'base64');
+  const baseMeta = await sharp(baseBuffer).metadata();
+  const bw = baseMeta.width ?? 1024;
+  const bh = baseMeta.height ?? 1024;
+
+  const targetLogoW = Math.round(bw * 0.13);
+  const logoResized = await sharp(logoBuffer)
+    .resize({ width: targetLogoW, withoutEnlargement: false })
+    .png()
+    .toBuffer();
+
+  const logoMeta = await sharp(logoResized).metadata();
+  const lw = logoMeta.width ?? targetLogoW;
+  const lh = logoMeta.height ?? targetLogoW;
+
+  const pad = Math.round(bw * 0.025);
+  const bgPad = Math.round(targetLogoW * 0.18);
+  const bgW = lw + bgPad * 2;
+  const bgH = lh + bgPad * 2;
+  const radius = Math.round(bgH / 5);
+
+  const bgSvg = `<svg width="${bgW}" height="${bgH}" xmlns="http://www.w3.org/2000/svg">
+    <rect x="0" y="0" width="${bgW}" height="${bgH}" rx="${radius}" ry="${radius}" fill="white" fill-opacity="0.88"/>
+  </svg>`;
+  const bgBuffer = Buffer.from(bgSvg);
+
+  const bgLeft = bw - bgW - pad;
+  const bgTop = bh - bgH - pad;
+  const logoLeft = bgLeft + bgPad;
+  const logoTop = bgTop + bgPad;
+
+  const out = await sharp(baseBuffer)
+    .composite([
+      { input: bgBuffer, left: bgLeft, top: bgTop },
+      { input: logoResized, left: logoLeft, top: logoTop },
+    ])
+    .png()
+    .toBuffer();
+
+  return out.toString('base64');
+}
+
 export async function POST(request: NextRequest) {
   try {
-    const { tenantSlug, atmosphere } = await request.json();
+    const { tenantSlug, atmosphere, aspectRatio, previousImageB64, revisionRequest } =
+      await request.json();
 
-    if (!tenantSlug || !atmosphere?.trim()) {
-      return NextResponse.json({ error: 'パラメータが不足しています' }, { status: 400 });
+    if (!tenantSlug) {
+      return NextResponse.json({ error: 'tenantSlug が必要です' }, { status: 400 });
+    }
+
+    const isRevision = !!previousImageB64 && !!revisionRequest?.trim();
+    if (!isRevision && !atmosphere?.trim()) {
+      return NextResponse.json({ error: '雰囲気を入力してください' }, { status: 400 });
     }
 
     const tenant = await getTenantBySlug(tenantSlug);
-
-    if (!tenant) {
-      return NextResponse.json({ error: 'テナントが見つかりません' }, { status: 404 });
-    }
-
+    if (!tenant) return NextResponse.json({ error: 'テナントが見つかりません' }, { status: 404 });
     if (!tenant.active) {
       return NextResponse.json({ error: 'このサービスは現在利用できません' }, { status: 403 });
     }
 
     const yearMonth = getYearMonth();
     const currentUsage = await getUsage(tenantSlug, yearMonth);
-
     if (currentUsage >= tenant.monthly_limit) {
       return NextResponse.json(
         { error: `今月の生成上限（${tenant.monthly_limit}枚）に達しました` },
@@ -39,16 +121,48 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const prompt = buildPrompt(tenant.base_prompt, atmosphere);
+    const size = SIZE_MAP[aspectRatio] ?? '1024x1024';
+    let imageB64: string | undefined;
 
-    const res = await getOpenAI().images.generate({
-      model: 'gpt-image-2',
-      prompt,
-      size: '1024x1024',
-    });
+    if (isRevision) {
+      const prompt = buildRevisionPrompt(tenant.base_prompt, atmosphere ?? '', revisionRequest);
+      const buf = Buffer.from(previousImageB64, 'base64');
+      const imageFile = new File([buf], 'previous.png', { type: 'image/png' });
 
-    const imageB64 = res.data?.[0]?.b64_json;
+      const res = await getOpenAI().images.edit({
+        model: 'gpt-image-2',
+        image: imageFile,
+        prompt,
+        size: '1024x1024',
+      });
+      imageB64 = res.data?.[0]?.b64_json;
+    } else {
+      const prompt = buildPrompt(tenant.base_prompt, atmosphere);
+      const res = await getOpenAI().images.generate({
+        model: 'gpt-image-2',
+        prompt,
+        size,
+      });
+      imageB64 = res.data?.[0]?.b64_json;
+    }
+
     if (!imageB64) throw new Error('画像の生成に失敗しました');
+
+    if (tenant.logo_url) {
+      const logoBuffer = await fetchLogoBuffer(tenant.logo_url);
+      if (logoBuffer) {
+        try {
+          imageB64 = await compositeLogo(imageB64, logoBuffer);
+        } catch (e) {
+          console.error('[logo composite failed]', e);
+        }
+      }
+    }
+
+    await appendHistory(tenant.slug, imageB64, {
+      atmosphere: atmosphere ?? '',
+      aspectRatio: aspectRatio ?? 'square',
+    });
 
     const newUsage = await incrementUsage(tenantSlug, yearMonth);
 
