@@ -3,6 +3,8 @@ import { getAllTenants, getUsage, getYearMonth } from '@/lib/tenants';
 import AdminLogoutButton from './logout-button';
 import SetupButton from './setup-button';
 
+export const dynamic = 'force-dynamic';
+
 export default async function AdminDashboard() {
   let tenants: Awaited<ReturnType<typeof getAllTenants>> = [];
   let dbError = '';

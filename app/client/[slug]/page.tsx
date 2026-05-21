@@ -1,6 +1,8 @@
 import { getTenantBySlug, getUsage, getYearMonth } from '@/lib/tenants';
 import ClientGeneratePage from './client-page';
 
+export const dynamic = 'force-dynamic';
+
 export default async function ClientTenantPage({ params }: { params: Promise<{ slug: string }> }) {
   const { slug } = await params;
 
