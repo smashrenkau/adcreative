@@ -90,12 +90,22 @@ export default async function AdminDashboard() {
                       </span>
                     </td>
                     <td className="p-4 text-right">
-                      <Link
-                        href={`/smash-admin/tenants/${t.id}`}
-                        className="text-blue-600 hover:underline text-sm"
-                      >
-                        編集
-                      </Link>
+                      <div className="flex items-center justify-end gap-3">
+                        <a
+                          href={`https://${t.slug}.smash-inc.co.jp`}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="text-blue-600 hover:underline text-sm"
+                        >
+                          リンク
+                        </a>
+                        <Link
+                          href={`/smash-admin/tenants/${t.id}`}
+                          className="text-blue-600 hover:underline text-sm"
+                        >
+                          編集
+                        </Link>
+                      </div>
                     </td>
                   </tr>
                 ))}
