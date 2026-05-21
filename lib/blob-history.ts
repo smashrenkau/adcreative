@@ -68,3 +68,19 @@ export async function appendHistory(
     { access: 'private', addRandomSuffix: false, allowOverwrite: true },
   );
 }
+
+export async function deleteHistoryItem(scope: string, id: string): Promise<boolean> {
+  if (!process.env.BLOB_READ_WRITE_TOKEN) return false;
+  const current = await readHistory(scope);
+  const idx = current.findIndex(item => item.id === id);
+  if (idx === -1) return false;
+
+  const next = current.filter(item => item.id !== id);
+  await del(imagePath(scope, id)).catch(() => undefined);
+  await put(
+    indexPath(scope),
+    new Blob([JSON.stringify(next)], { type: 'application/json' }),
+    { access: 'private', addRandomSuffix: false, allowOverwrite: true },
+  );
+  return true;
+}

@@ -41,7 +41,7 @@ export default async function ClientHistoryPage({
             まだ生成履歴がありません。
           </div>
         ) : (
-          <HistoryGrid items={items} />
+          <HistoryGrid slug={slug} items={items} />
         )}
       </div>
     </div>
