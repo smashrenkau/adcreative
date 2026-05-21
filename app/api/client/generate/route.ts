@@ -49,6 +49,45 @@ async function fetchLogoBuffer(logoUrl: string): Promise<Buffer | null> {
   }
 }
 
+async function findQuietestPosition(
+  baseBuffer: Buffer,
+  bw: number,
+  bh: number,
+  bgW: number,
+  bgH: number,
+  pad: number,
+): Promise<{ left: number; top: number }> {
+  const candidates: { left: number; top: number }[] = [
+    { left: pad, top: pad },                              // top-left
+    { left: Math.round((bw - bgW) / 2), top: pad },       // top-center
+    { left: bw - bgW - pad, top: pad },                   // top-right
+    { left: pad, top: bh - bgH - pad },                   // bottom-left
+    { left: Math.round((bw - bgW) / 2), top: bh - bgH - pad }, // bottom-center
+    { left: bw - bgW - pad, top: bh - bgH - pad },        // bottom-right
+  ];
+
+  const scored = await Promise.all(
+    candidates.map(async pos => {
+      if (pos.left < 0 || pos.top < 0 || pos.left + bgW > bw || pos.top + bgH > bh) {
+        return { pos, score: Infinity };
+      }
+      try {
+        const stats = await sharp(baseBuffer)
+          .extract({ left: pos.left, top: pos.top, width: bgW, height: bgH })
+          .stats();
+        const rgb = stats.channels.slice(0, 3);
+        const avgStdev = rgb.reduce((s, c) => s + c.stdev, 0) / rgb.length;
+        return { pos, score: avgStdev };
+      } catch {
+        return { pos, score: Infinity };
+      }
+    }),
+  );
+
+  scored.sort((a, b) => a.score - b.score);
+  return scored[0].pos;
+}
+
 async function compositeLogo(baseB64: string, logoBuffer: Buffer): Promise<string> {
   const baseBuffer = Buffer.from(baseB64, 'base64');
   const baseMeta = await sharp(baseBuffer).metadata();
@@ -76,8 +115,7 @@ async function compositeLogo(baseB64: string, logoBuffer: Buffer): Promise<strin
   </svg>`;
   const bgBuffer = Buffer.from(bgSvg);
 
-  const bgLeft = bw - bgW - pad;
-  const bgTop = bh - bgH - pad;
+  const { left: bgLeft, top: bgTop } = await findQuietestPosition(baseBuffer, bw, bh, bgW, bgH, pad);
   const logoLeft = bgLeft + bgPad;
   const logoTop = bgTop + bgPad;
 
