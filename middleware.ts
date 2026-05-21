@@ -39,8 +39,12 @@ export function middleware(request: NextRequest) {
   if (!isLocalhost) {
     const subdomain = hostname.split('.')[0];
     if (subdomain && subdomain !== 'adcreative') {
+      // API ルートはそのまま通す（書き換えると /client/[slug] の HTML に化けてしまう）
+      if (pathname.startsWith('/api/')) return NextResponse.next();
+
       const url = request.nextUrl.clone();
-      url.pathname = `/client/${subdomain}`;
+      url.pathname =
+        pathname === '/' ? `/client/${subdomain}` : `/client/${subdomain}${pathname}`;
       return NextResponse.rewrite(url);
     }
   }

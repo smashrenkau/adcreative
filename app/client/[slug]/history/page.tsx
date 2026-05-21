@@ -31,7 +31,7 @@ export default async function ClientHistoryPage({
             <h1 className="text-2xl font-bold text-gray-900">{tenant.name}</h1>
             <p className="text-sm text-gray-500 mt-1">生成履歴（最新{items.length}件 / 最大100件）</p>
           </div>
-          <Link href={`/client/${slug}`} className="text-sm text-blue-600 hover:underline">
+          <Link href="/" className="text-sm text-blue-600 hover:underline">
             ← 生成画面に戻る
           </Link>
         </div>

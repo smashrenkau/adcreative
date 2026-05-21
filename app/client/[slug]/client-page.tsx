@@ -97,10 +97,7 @@ export default function ClientGeneratePage({
             <h1 className="text-2xl font-bold text-gray-900">{tenant.name}</h1>
             <p className="text-sm text-gray-500 mt-1">AI 広告クリエイター</p>
           </div>
-          <Link
-            href={`/client/${tenant.slug}/history`}
-            className="text-sm text-blue-600 hover:underline"
-          >
+          <Link href="/history" className="text-sm text-blue-600 hover:underline">
             生成履歴 →
           </Link>
         </div>
